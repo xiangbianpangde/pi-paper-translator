@@ -5,8 +5,13 @@ BACKEND_REPO="https://github.com/xiangbianpangde/pdf2zh.git"
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 DEFAULT_BACKEND_DIR="$DATA_HOME/pi-paper-translator/pdf2zh"
 DEFAULT_LIBRARY_ROOT="$HOME/Documents/Papers"
+DEFAULT_TRANSLATION_BASE_URL="https://api.minimaxi.com/v1"
+DEFAULT_TRANSLATION_MODEL="MiniMax-M3"
 BACKEND_DIR="$DEFAULT_BACKEND_DIR"
 LIBRARY_ROOT=""
+TRANSLATION_BASE_URL="$DEFAULT_TRANSLATION_BASE_URL"
+TRANSLATION_MODEL="$DEFAULT_TRANSLATION_MODEL"
+TRANSLATION_API_KEY="${PI_PAPER_TRANSLATOR_API_KEY:-${MINIMAX_API_KEY:-}}"
 NON_INTERACTIVE=0
 INSTALL_PI=1
 
@@ -21,12 +26,14 @@ Options:
   --non-interactive       Do not prompt; require credentials in the environment.
   --backend-dir PATH      Backend clone/working directory (default: ~/.local/share/pi-paper-translator/pdf2zh).
   --library-root PATH     Obsidian paper-library root directory.
+  --translation-base-url URL  OpenAI-compatible translation endpoint.
+  --translation-model MODEL   Translation model id.
   --no-pi-install         Configure backend and secrets without running `pi install`.
   -h, --help              Show this help.
 
 Credentials are read only from the environment in non-interactive mode:
   MINERU_TOKEN
-  MINIMAX_API_KEY
+  PI_PAPER_TRANSLATOR_API_KEY (or legacy MINIMAX_API_KEY)
 
 Do not pass credentials as command-line arguments. They are stored in the backend's
 ignored .secrets/ directory with owner-only permissions, never in this repository.
@@ -42,6 +49,12 @@ while (($#)); do
     --library-root)
       [[ $# -ge 2 ]] || { echo "--library-root requires a path" >&2; exit 2; }
       LIBRARY_ROOT="$2"; shift 2 ;;
+    --translation-base-url)
+      [[ $# -ge 2 ]] || { echo "--translation-base-url requires a URL" >&2; exit 2; }
+      TRANSLATION_BASE_URL="$2"; shift 2 ;;
+    --translation-model)
+      [[ $# -ge 2 ]] || { echo "--translation-model requires a model id" >&2; exit 2; }
+      TRANSLATION_MODEL="$2"; shift 2 ;;
     --no-pi-install) INSTALL_PI=0; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
@@ -69,6 +82,15 @@ if [[ -z "$LIBRARY_ROOT" ]]; then
 fi
 LIBRARY_ROOT="$(expand_path "$LIBRARY_ROOT")"
 
+if (( ! NON_INTERACTIVE )); then
+  printf 'OpenAI-compatible translation base URL [%s]: ' "$TRANSLATION_BASE_URL"
+  IFS= read -r entered_base_url
+  TRANSLATION_BASE_URL="${entered_base_url:-$TRANSLATION_BASE_URL}"
+  printf 'Translation model [%s]: ' "$TRANSLATION_MODEL"
+  IFS= read -r entered_model
+  TRANSLATION_MODEL="${entered_model:-$TRANSLATION_MODEL}"
+fi
+
 if (( ! NON_INTERACTIVE )) && { [[ -e "$BACKEND_DIR/.secrets/mineru.json" ]] || [[ -e "$BACKEND_DIR/.secrets/minimax.json" ]]; }; then
   printf 'Credential files already exist under %s/.secrets. Replace them? [y/N] ' "$BACKEND_DIR"
   IFS= read -r replace_secrets
@@ -89,23 +111,26 @@ if (( ! NON_INTERACTIVE )); then
     printf '\n'
     [[ -z "$entered_token" ]] || MINERU_TOKEN="$entered_token"
   fi
-  if [[ -z "${MINIMAX_API_KEY:-}" ]]; then
-    printf 'MiniMax API key (input hidden): '
-    IFS= read -r -s MINIMAX_API_KEY
+  if [[ -z "$TRANSLATION_API_KEY" ]]; then
+    printf 'Translation API key (input hidden): '
+    IFS= read -r -s TRANSLATION_API_KEY
     printf '\n'
   else
-    printf 'MiniMax API key is present in the environment. Press Enter to keep it, or type a replacement (hidden): '
+    printf 'Translation API key is present in the environment. Press Enter to keep it, or type a replacement (hidden): '
     IFS= read -r -s entered_key
     printf '\n'
-    [[ -z "$entered_key" ]] || MINIMAX_API_KEY="$entered_key"
+    [[ -z "$entered_key" ]] || TRANSLATION_API_KEY="$entered_key"
   fi
 fi
 
-if [[ -z "${MINERU_TOKEN:-}" || -z "${MINIMAX_API_KEY:-}" ]]; then
-  echo "Both MINERU_TOKEN and MINIMAX_API_KEY are required." >&2
+if [[ -z "${MINERU_TOKEN:-}" || -z "$TRANSLATION_API_KEY" ]]; then
+  echo "Both MINERU_TOKEN and a translation API key are required." >&2
   exit 2
 fi
-export MINERU_TOKEN MINIMAX_API_KEY
+export MINERU_TOKEN
+export PI_PAPER_TRANSLATOR_API_KEY="$TRANSLATION_API_KEY"
+export PI_PAPER_TRANSLATOR_TRANSLATION_BASE_URL="$TRANSLATION_BASE_URL"
+export PI_PAPER_TRANSLATOR_TRANSLATION_MODEL="$TRANSLATION_MODEL"
 
 command -v git >/dev/null || { echo "git is required." >&2; exit 1; }
 command -v node >/dev/null || { echo "Node.js is required to write the private configuration files." >&2; exit 1; }
@@ -150,7 +175,7 @@ const os = require('node:os');
 const secretsDir = process.env.PI_PAPER_TRANSLATOR_BACKEND_DIR + '/.secrets';
 const files = [
   ['mineru.json', { token: process.env.MINERU_TOKEN }],
-  ['minimax.json', { key: process.env.MINIMAX_API_KEY }],
+  ['minimax.json', { key: process.env.PI_PAPER_TRANSLATOR_API_KEY }],
 ];
 for (const [name, value] of files) {
   const target = path.join(secretsDir, name);
@@ -174,11 +199,13 @@ const config = {
   ...prior,
   backendDir: process.env.PI_PAPER_TRANSLATOR_BACKEND_DIR,
   libraryRoot: process.env.PI_PAPER_TRANSLATOR_LIBRARY_ROOT,
+  translationBaseUrl: process.env.PI_PAPER_TRANSLATOR_TRANSLATION_BASE_URL,
+  translationModel: process.env.PI_PAPER_TRANSLATOR_TRANSLATION_MODEL,
 };
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
 fs.chmodSync(configPath, 0o600);
 NODE
-unset MINERU_TOKEN MINIMAX_API_KEY entered_token entered_key
+unset MINERU_TOKEN MINIMAX_API_KEY PI_PAPER_TRANSLATOR_API_KEY TRANSLATION_API_KEY entered_token entered_key
 
 if (( INSTALL_PI )); then
   if command -v pi >/dev/null; then

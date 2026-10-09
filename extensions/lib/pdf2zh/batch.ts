@@ -4,6 +4,7 @@ import { basename, extname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { IMAGES_DIR, paperTitleFromMarkdown, pdfStem, RAW_DIR, renderLocalizedTree, sanitizePaperTitle, localizedPaperNames } from "./layout.ts";
 import { runPipeline, type RunDeps } from "./runner.ts";
+import { resolveTranslationBaseUrl, resolveTranslationModel } from "./user-config.ts";
 import type { Pdf2zhOptions, Progress } from "./types.ts";
 
 export interface BatchOptions {
@@ -11,6 +12,7 @@ export interface BatchOptions {
 	category: string;
 	libraryRoot: string;
 	model?: string;
+	baseUrl?: string;
 	workers?: number;
 	chunkSize?: number;
 }
@@ -80,6 +82,8 @@ export async function runBatchPipeline(options: BatchOptions, deps: BatchDeps = 
 	const staged: StagedPaper[] = [];
 	const logTail: string[] = [];
 	const runOne = deps.runOne ?? runPipeline;
+	const translationModel = options.model ?? resolveTranslationModel() ?? "MiniMax-M3.1-Flash-Preview";
+	const translationBaseUrl = options.baseUrl ?? resolveTranslationBaseUrl();
 	try {
 		stageRoot = await mkdtemp(join(tmpdir(), "pi-paper-translator-batch-"));
 		for (let index = 0; index < inputPaths.length; index++) {
@@ -91,7 +95,8 @@ export async function runBatchPipeline(options: BatchOptions, deps: BatchDeps = 
 				ocr: "api",
 				backend: "pipeline",
 				lang: "en",
-				model: options.model ?? "MiniMax-M3.1-Flash-Preview",
+				model: translationModel,
+				baseUrl: translationBaseUrl,
 				workers: options.workers ?? 8,
 				chunkSize: options.chunkSize ?? 3000,
 				skipTranslate: false,

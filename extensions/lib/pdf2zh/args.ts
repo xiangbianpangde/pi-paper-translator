@@ -20,7 +20,8 @@ export const HELP_TEXT = [
 	"  -b, --backend <name>     --ocr local 时的 mineru backend（默认 pipeline）",
 	"  -l, --lang <code>        OCR 语言提示（默认 en）",
 	"      --ocr <api|local>    OCR 模式（默认 api = MinerU 云 API）",
-	"      --model <name>       翻译模型（默认 MiniMax-M3）",
+	"      --model <name>       翻译模型（默认 MiniMax-M3；可由用户配置覆盖）",
+	"      --base-url <url>     OpenAI 兼容翻译接口地址（可由用户配置覆盖）",
 	"      --workers <n>        翻译并发数（默认 8）",
 	"      --chunk-size <n>     翻译分块字符数（默认 3000）",
 	"      --skip-translate     只做 PDF -> 英文 md，不翻译",
@@ -35,6 +36,8 @@ export interface ParsedArgs {
 	help?: boolean;
 	/** Set when parsing failed; already phrased for direct display. */
 	error?: string;
+	/** True when --model was explicitly supplied. */
+	modelSpecified?: boolean;
 	/** Non-fatal notes, e.g. a relative path being resolved against cwd. */
 	warnings?: string[];
 }
@@ -51,6 +54,7 @@ const VALUE_FLAGS = new Set([
 	"--lang",
 	"--ocr",
 	"--model",
+	"--base-url",
 	"--workers",
 	"--chunk-size",
 ]);
@@ -83,6 +87,8 @@ export function parseArgs(raw: string, cwd: string): ParsedArgs {
 	let backend = "pipeline";
 	let lang = "en";
 	let model = "MiniMax-M3";
+	let modelSpecified = false;
+	let baseUrl: string | undefined;
 	let workers = 8;
 	let chunkSize = 3000;
 	let skipTranslate = false;
@@ -116,6 +122,10 @@ export function parseArgs(raw: string, cwd: string): ParsedArgs {
 					break;
 				case "--model":
 					model = next;
+					modelSpecified = true;
+					break;
+				case "--base-url":
+					baseUrl = next;
 					break;
 				case "--workers": {
 					const parsed = toPositiveInt(next, token, workers);
@@ -168,11 +178,13 @@ export function parseArgs(raw: string, cwd: string): ParsedArgs {
 			backend,
 			lang,
 			model,
+			baseUrl,
 			workers,
 			chunkSize,
 			skipTranslate,
 			force,
 		},
 		warnings,
+		modelSpecified,
 	};
 }

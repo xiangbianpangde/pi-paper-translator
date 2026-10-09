@@ -32,11 +32,11 @@ The setup wizard:
 
 1. Clones the public `pdf2zh` backend into `~/.local/share/pi-paper-translator/pdf2zh` (or uses `--backend-dir`).
 2. Creates a Python virtual environment and installs only the API-mode dependencies; local MinerU inference and Gradio are not installed.
-3. Prompts for a paper-library root and masked MinerU/MiniMax credentials.
-4. Stores credentials in the backend's ignored `.secrets/` directory (files mode `0600`) and non-secret paths in `~/.config/pi-paper-translator/config.json` (mode `0600`).
+3. Prompts for a paper-library root, OpenAI-compatible translation endpoint/model, and masked MinerU/translation API credentials.
+4. Stores credentials in the backend's ignored `.secrets/` directory (files mode `0600`) and non-secret settings in `~/.config/pi-paper-translator/config.json` (mode `0600`).
 5. Runs `pi install git:github.com/xiangbianpangde/pi-paper-translator` when the Pi CLI is available.
 
-Get a MinerU token at <https://mineru.net/apiManage/token>. Create a MiniMax API key in your MiniMax account. Do not paste credentials into source files, command-line arguments, or issue reports.
+Get a MinerU token at <https://mineru.net/apiManage/token>. The translation endpoint must support the OpenAI chat-completions API; MiniMax is the default, and custom gateways/models can be set during setup. Do not paste credentials into source files, command-line arguments, or issue reports.
 
 ### Pi package CLI
 
@@ -59,21 +59,25 @@ Direct Pi package installation installs only the extension; it does not prompt f
 Supply secrets through your CI or secret manager environment (not as CLI flags), then run:
 
 ```bash
-MINERU_TOKEN="$MINERU_TOKEN" MINIMAX_API_KEY="$MINIMAX_API_KEY" \
+MINERU_TOKEN="$MINERU_TOKEN" PI_PAPER_TRANSLATOR_API_KEY="$TRANSLATION_API_KEY" \
   ./scripts/setup.sh --non-interactive \
-  --library-root "/absolute/path/to/Obsidian/papers"
+  --library-root "/absolute/path/to/Obsidian/papers" \
+  --translation-base-url "https://api.example/v1" \
+  --translation-model "model-id"
 ```
 
 You may also choose an absolute backend path:
 
 ```bash
-MINERU_TOKEN="$MINERU_TOKEN" MINIMAX_API_KEY="$MINIMAX_API_KEY" \
+MINERU_TOKEN="$MINERU_TOKEN" PI_PAPER_TRANSLATOR_API_KEY="$TRANSLATION_API_KEY" \
   ./scripts/setup.sh --non-interactive \
   --backend-dir "$HOME/.local/share/pi-paper-translator/pdf2zh" \
-  --library-root "$HOME/Documents/Obsidian/Papers"
+  --library-root "$HOME/Documents/Obsidian/Papers" \
+  --translation-base-url "https://api.example/v1" \
+  --translation-model "model-id"
 ```
 
-For provisioning without the Pi CLI, add `--no-pi-install`; install the package later with `pi install <source>`. Non-interactive setup requires `--library-root`, `MINERU_TOKEN`, and `MINIMAX_API_KEY`.
+For provisioning without the Pi CLI, add `--no-pi-install`; install the package later with `pi install <source>`. Non-interactive setup requires `--library-root`, `MINERU_TOKEN`, and `PI_PAPER_TRANSLATOR_API_KEY` (or legacy `MINIMAX_API_KEY`). Base URL and model can be set with `--translation-base-url` and `--translation-model`.
 
 ## Use
 
@@ -81,20 +85,20 @@ Restart Pi after installation. The agent tool `pdf_translate_batch` accepts:
 
 - `pdfPaths`: one or more local PDF absolute paths.
 - `category`: one category directory shared by all PDFs, such as `02-上下文工程`.
-- Optional `libraryRoot`, `model`, `workers`, and `chunkSize` overrides.
+- Optional `libraryRoot`, `model`, `baseUrl`, `workers`, and `chunkSize` overrides.
 
-The default model is `MiniMax-M3.1-Flash-Preview`. The existing `/pdf2zh` command and `pdf_translate` single-file agent tool remain available for compatibility.
+The default model is `MiniMax-M3.1-Flash-Preview`, unless `translationModel` is set in the user config. The endpoint can be set with `translationBaseUrl` there. The existing `/pdf2zh` command and `pdf_translate` single-file agent tool remain available for compatibility.
 
 Processing is performed in a temporary staging directory. No destination is touched until all PDFs have completed and title collisions have been checked. If any destination exists, Pi asks the user before replacing it. In JSON/print modes or any context without UI, the batch is refused rather than overwriting silently.
 
-The standalone extension can use `PDF2ZH_PROJECT_DIR` and `PI_PAPER_TRANSLATOR_LIBRARY_ROOT` environment overrides. Persistent paths are read from `~/.config/pi-paper-translator/config.json` (or `$XDG_CONFIG_HOME/pi-paper-translator/config.json`). The config stores paths only, never credentials.
+The standalone extension can use `PDF2ZH_PROJECT_DIR`, `PI_PAPER_TRANSLATOR_LIBRARY_ROOT`, `PI_PAPER_TRANSLATOR_TRANSLATION_BASE_URL`, and `PI_PAPER_TRANSLATOR_TRANSLATION_MODEL` environment overrides. Persistent settings are read from `~/.config/pi-paper-translator/config.json` (or `$XDG_CONFIG_HOME/pi-paper-translator/config.json`). This file stores paths and non-secret model settings, never credentials.
 
 ## Security and privacy
 
 - API keys are never embedded in this repository or passed by the installer as command-line arguments.
 - Credentials are written to `<backend>/.secrets/mineru.json` and `<backend>/.secrets/minimax.json`; the backend repository ignores `.secrets/`.
 - The installer writes secrets/config with owner-only permissions and keeps the backend clone outside the plugin checkout by default.
-- PDFs are sent to MinerU and the resulting text is sent to MiniMax; use only documents you are authorized to process. Their API terms, privacy policies, quotas, and charges apply.
+- PDFs are sent to MinerU and the resulting text is sent to the configured translation endpoint; use only documents you are authorized to process. API terms, privacy policies, quotas, and charges apply.
 
 ## Development and verification
 

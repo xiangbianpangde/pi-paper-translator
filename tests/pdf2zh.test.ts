@@ -268,6 +268,7 @@ describe("args: parseArgs", () => {
 		assert.equal(o.backend, "pipeline");
 		assert.equal(o.lang, "en");
 		assert.equal(o.model, "MiniMax-M3");
+		assert.equal(parseArgs(PDF, CWD).modelSpecified, false);
 		assert.equal(o.workers, 8);
 		assert.equal(o.chunkSize, 3000);
 		assert.equal(o.skipTranslate, false);
@@ -276,13 +277,15 @@ describe("args: parseArgs", () => {
 
 	it("parses every documented flag", () => {
 		const o = parseArgs(
-			`${PDF} --ocr local -b vlm-auto-engine -l ch --model MiniMax-M2 --workers 4 --chunk-size 1500 --skip-translate --force`,
+			`${PDF} --ocr local -b vlm-auto-engine -l ch --model MiniMax-M2 --base-url https://gateway.example/v1 --workers 4 --chunk-size 1500 --skip-translate --force`,
 			CWD,
 		).options!;
 		assert.equal(o.ocr, "local");
 		assert.equal(o.backend, "vlm-auto-engine");
 		assert.equal(o.lang, "ch");
 		assert.equal(o.model, "MiniMax-M2");
+		assert.equal(o.baseUrl, "https://gateway.example/v1");
+		assert.equal(parseArgs(`${PDF} --model gemini-3.7-flash`, CWD).modelSpecified, true);
 		assert.equal(o.workers, 4);
 		assert.equal(o.chunkSize, 1500);
 		assert.equal(o.skipTranslate, true);
@@ -417,12 +420,15 @@ describe("runner: buildArgs", () => {
 		assert.equal(args[i + 2]?.endsWith(".pdf"), false, "-o must not already carry the stem");
 	});
 
-	it("forwards the pipeline flags", () => {
-		const args = buildArgs({ ...base, workers: 2, chunkSize: 800, model: "MiniMax-M2" });
+	it("forwards model and optional OpenAI-compatible base URL", () => {
+		const args = buildArgs({ ...base, workers: 2, chunkSize: 800, model: "gemini-3.7-flash", baseUrl: "https://gateway.example/v1" });
 		assert.ok(args.includes("--ocr"));
 		assert.ok(args.includes("--workers"));
 		assert.ok(args.includes("--chunk-size"));
 		assert.ok(args.includes("800"));
+		assert.ok(args.includes("gemini-3.7-flash"));
+		const baseUrlIndex = args.indexOf("--base-url");
+		assert.equal(args[baseUrlIndex + 1], "https://gateway.example/v1");
 	});
 
 	it("adds --skip-translate only when asked", () => {

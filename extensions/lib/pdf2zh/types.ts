@@ -3,7 +3,7 @@
  *
  * The pipeline is owned by the local project at ~/Projects/pdf2zh:
  *   MinerU 云 API (OCR)  ->  <stem>.md  +  images/
- *   MiniMax-M3 (翻译)    ->  <stem>_zh.md
+ *   configured model (翻译) -> <stem>_zh.md
  *
  * This module only orchestrates that project; it never reimplements it.
  */
@@ -22,8 +22,10 @@ export interface Pdf2zhOptions {
 	backend: string;
 	/** OCR language hint passed to mineru, only meaningful when ocr === "local". */
 	lang: string;
-	/** Translation model id, e.g. "MiniMax-M3". */
+	/** Translation model id, e.g. "MiniMax-M3" or an OpenAI-compatible model. */
 	model: string;
+	/** Optional OpenAI-compatible translation API base URL. Never contains the API key. */
+	baseUrl?: string;
 	/** Concurrent translation requests. */
 	workers: number;
 	/** Max characters per translation chunk. */

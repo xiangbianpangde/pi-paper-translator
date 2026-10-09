@@ -5,6 +5,8 @@ import { isAbsolute, join, resolve } from "node:path";
 export interface UserConfig {
 	backendDir?: string;
 	libraryRoot?: string;
+	translationBaseUrl?: string;
+	translationModel?: string;
 }
 
 export function userConfigPath(): string {
@@ -30,6 +32,8 @@ export function loadUserConfig(): UserConfig {
 	return {
 		backendDir: asPath(value.backendDir),
 		libraryRoot: asPath(value.libraryRoot),
+		translationBaseUrl: asPath(value.translationBaseUrl),
+		translationModel: asPath(value.translationModel),
 	};
 }
 
@@ -47,6 +51,18 @@ export function resolveLibraryRoot(): string | undefined {
 	if (fromEnv) return expandPath(fromEnv);
 	const configured = loadUserConfig().libraryRoot;
 	return configured ? expandPath(configured) : undefined;
+}
+
+export function resolveTranslationBaseUrl(): string | undefined {
+	const fromEnv = process.env.PI_PAPER_TRANSLATOR_TRANSLATION_BASE_URL?.trim();
+	if (fromEnv) return fromEnv;
+	return loadUserConfig().translationBaseUrl;
+}
+
+export function resolveTranslationModel(): string | undefined {
+	const fromEnv = process.env.PI_PAPER_TRANSLATOR_TRANSLATION_MODEL?.trim();
+	if (fromEnv) return fromEnv;
+	return loadUserConfig().translationModel;
 }
 
 function asPath(value: unknown): string | undefined {

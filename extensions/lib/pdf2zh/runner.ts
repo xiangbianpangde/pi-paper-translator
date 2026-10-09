@@ -70,7 +70,9 @@ export async function alreadyTranslated(targetDir: string, stem: string): Promis
 
 /** Build the argument vector handed to python. Exported for testing. */
 export function buildArgs(opts: Pdf2zhOptions): string[] {
-	const args = [scriptPath(), opts.pdfPath, "-o", opts.outputRoot, "--ocr", opts.ocr, "-b", opts.backend, "-l", opts.lang, "--model", opts.model, "--workers", String(opts.workers), "--chunk-size", String(opts.chunkSize)];
+	const ocrMode = opts.ocr === "api" ? "precision" : opts.ocr;
+	const args = [scriptPath(), opts.pdfPath, "-o", opts.outputRoot, "--ocr", ocrMode, "-b", opts.backend, "-l", opts.lang, "--model", opts.model, "--workers", String(opts.workers), "--chunk-size", String(opts.chunkSize)];
+	if (opts.baseUrl) args.push("--base-url", opts.baseUrl);
 	if (opts.skipTranslate) args.push("--skip-translate");
 	return args;
 }

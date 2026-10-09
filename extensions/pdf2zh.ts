@@ -2,7 +2,7 @@
  * /pdf2zh — translate an English PDF into Chinese Markdown.
  *
  * Thin orchestration layer over the local project at ~/Projects/pdf2zh
- * (MinerU cloud OCR + MiniMax-M3 translation). All real work lives in
+ * (MinerU cloud OCR + configured OpenAI-compatible translation model). All real work lives in
  * lib/pdf2zh/; this file only wires the command, the LLM tool and the TUI view.
  *
  * Output contract — a sibling directory of the source PDF:
@@ -20,7 +20,7 @@ import { runBatchPipeline, type BatchRunResult } from "./lib/pdf2zh/batch.ts";
 import { HELP_TEXT, parseArgs } from "./lib/pdf2zh/args.ts";
 import { runPipeline } from "./lib/pdf2zh/runner.ts";
 import type { Pdf2zhOptions, RunResult } from "./lib/pdf2zh/types.ts";
-import { resolveLibraryRoot } from "./lib/pdf2zh/user-config.ts";
+import { resolveLibraryRoot, resolveTranslationBaseUrl, resolveTranslationModel } from "./lib/pdf2zh/user-config.ts";
 import { Pdf2zhProgressView } from "./lib/pdf2zh/view.ts";
 
 /** Render the final layout for display. */
@@ -106,6 +106,8 @@ export default function (pi: ExtensionAPI) {
 			for (const w of parsed.warnings ?? []) ctx.ui.notify(w, "warning");
 
 			const opts = parsed.options;
+			if (!parsed.modelSpecified) opts.model = resolveTranslationModel() ?? opts.model;
+			opts.baseUrl ??= resolveTranslationBaseUrl();
 			const result = ctx.mode === "tui" ? await runWithView(opts, ctx) : await runHeadless(opts, ctx);
 			if (result === null) {
 				ctx.ui.notify("已取消", "info");
@@ -124,7 +126,7 @@ export default function (pi: ExtensionAPI) {
 		name: "pdf_translate",
 		label: "PDF 翻译",
 		description: [
-			"把英文 PDF 翻译成中文 Markdown，调用本地 pdf2zh 项目（MinerU 云 OCR + MiniMax-M3 翻译）。",
+			"把英文 PDF 翻译成中文 Markdown，调用本地 pdf2zh 项目（MinerU 云 OCR + 用户配置的 OpenAI 兼容翻译模型）。",
 			"在源 PDF 同级生成 <论文名>/ 子目录，内含翻译后的 <论文名>_zh.md、images/（md 内为相对引用）、原 PDF 副本，以及 _raw/（英文原版 md 与 MinerU 副产物，可删）。",
 			"首次调用前建议先向用户确认 PDF 路径；一次完整运行通常需要数分钟。",
 		].join("\n"),
@@ -135,7 +137,8 @@ export default function (pi: ExtensionAPI) {
 				Type.String({ description: "输出根目录；生成的 <论文名>/ 放在其下。默认与源 PDF 同级" }),
 			),
 			ocr: Type.Optional(Type.Union([Type.Literal("api"), Type.Literal("local")], { description: "OCR 模式，默认 api（MinerU 云 API）" })),
-			model: Type.Optional(Type.String({ description: "翻译模型，默认 MiniMax-M3" })),
+			model: Type.Optional(Type.String({ description: "翻译模型；默认使用用户配置或 MiniMax-M3" })),
+			baseUrl: Type.Optional(Type.String({ description: "OpenAI 兼容翻译接口地址；默认使用用户配置" })),
 			workers: Type.Optional(Type.Number({ description: "翻译并发数，默认 8" })),
 			chunkSize: Type.Optional(Type.Number({ description: "翻译分块字符数，默认 3000" })),
 			skipTranslate: Type.Optional(Type.Boolean({ description: "只做 PDF → 英文 md，不翻译，默认 false" })),
@@ -148,7 +151,8 @@ export default function (pi: ExtensionAPI) {
 				ocr: params.ocr ?? "api",
 				backend: "pipeline",
 				lang: "en",
-				model: params.model ?? "MiniMax-M3",
+				model: params.model ?? resolveTranslationModel() ?? "MiniMax-M3",
+				baseUrl: params.baseUrl ?? resolveTranslationBaseUrl(),
 				workers: params.workers ?? 8,
 				chunkSize: params.chunkSize ?? 3000,
 				skipTranslate: params.skipTranslate ?? false,
@@ -195,12 +199,12 @@ export default function (pi: ExtensionAPI) {
 		name: "pdf_translate_batch",
 		label: "批量整理论文",
 		description: [
-			"批量处理多个本地英文 PDF：MinerU 云 API OCR + MiniMax 全文翻译。",
+			"批量处理多个本地英文 PDF：MinerU 云 API OCR + 用户配置的 OpenAI 兼容模型全文翻译。",
 			"同一批次的论文写入论文库根目录下同一个分类目录；每篇目录和文件前缀取中文 Markdown 的一级标题，缺失时回退 PDF 文件名。",
 			"每篇输出原 PDF、_英文.md、_全文翻译.md 和 images/。图片 Markdown 相对链接保持有效。",
 			"开始前请确认用户提供的 PDF 路径、分类名与论文库根目录。目标存在时会弹出人工覆盖确认；无 UI 时拒绝覆盖。",
 		].join("\n"),
-		promptSnippet: "批量 MinerU OCR + MiniMax 翻译多篇 PDF，并按 Obsidian 中文论文目录整理。",
+		promptSnippet: "批量 MinerU OCR + 配置模型翻译多篇 PDF，并按 Obsidian 中文论文目录整理。",
 		annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
 		parameters: Type.Object({
 			pdfPaths: Type.Array(Type.String({ description: "本地 PDF 的绝对路径" }), {
@@ -209,7 +213,8 @@ export default function (pi: ExtensionAPI) {
 			}),
 			category: Type.String({ description: "论文库根目录下的单个分类目录名，例如 02-上下文工程" }),
 			libraryRoot: Type.Optional(Type.String({ description: "论文库根目录绝对路径；默认使用安装时保存的设置" })),
-			model: Type.Optional(Type.String({ description: "MiniMax 模型 ID，默认 MiniMax-M3.1-Flash-Preview" })),
+			model: Type.Optional(Type.String({ description: "翻译模型；默认使用用户配置或 MiniMax-M3.1-Flash-Preview" })),
+			baseUrl: Type.Optional(Type.String({ description: "OpenAI 兼容翻译接口地址；默认使用用户配置" })),
 			workers: Type.Optional(Type.Number({ minimum: 1, multipleOf: 1, description: "每篇论文的翻译并发数，默认 8" })),
 			chunkSize: Type.Optional(Type.Number({ minimum: 1, multipleOf: 1, description: "翻译分块字符数，默认 3000" })),
 		}),
@@ -226,7 +231,8 @@ export default function (pi: ExtensionAPI) {
 				pdfPaths: params.pdfPaths,
 				category: params.category,
 				libraryRoot,
-				model: params.model ?? "MiniMax-M3.1-Flash-Preview",
+				model: params.model ?? resolveTranslationModel() ?? "MiniMax-M3.1-Flash-Preview",
+				baseUrl: params.baseUrl ?? resolveTranslationBaseUrl(),
 				workers: params.workers ?? 8,
 				chunkSize: params.chunkSize ?? 3000,
 			}, {
