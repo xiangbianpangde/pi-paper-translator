@@ -1,0 +1,29 @@
+{
+  "name": "pi-paper-translator",
+  "version": "0.1.0",
+  "description": "Pi extension for batch MinerU OCR, MiniMax paper translation, and Obsidian-ready output",
+  "license": "MIT",
+  "keywords": ["pi-package", "pdf", "mineru", "minimax", "obsidian", "academic-translation"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xiangbianpangde/pi-paper-translator.git"
+  },
+  "pi": {
+    "extensions": ["./extensions/pdf2zh.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": { "optional": true },
+    "typebox": { "optional": true }
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6"
+  },
+  "scripts": {
+    "test": "tsx --test tests/*.test.ts",
+    "smoke:extension": "bash scripts/smoke-extension.sh"
+  }
+}

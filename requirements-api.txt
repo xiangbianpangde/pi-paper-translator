@@ -1,0 +1,3 @@
+# Minimal dependencies for the MinerU cloud API + OpenAI-compatible MiniMax path.
+# Local MinerU inference / Gradio UI are intentionally not installed by the setup script.
+openai>=1.30
